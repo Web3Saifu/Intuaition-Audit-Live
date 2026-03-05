@@ -21,7 +21,7 @@ import { VotingEscrow, LockedBalance } from "src/external/curve/VotingEscrow.sol
  *         - "Bonded" (or veTRUST) is a time-weighted voting power derived from the locked tokens.
  *           It decays linearly over time, and uses the same formula as the Curve's veCRV.
  *         - Rewards for each epoch are allocated pro rata to users’ shares of the total bonded
- *           (veTRUST) balance at the end of that epoch.
+ *           (veTRUST) balance at the e nd of that epoch.
  *         - Certain APR and emission formulas reference the raw locked balance rather than the
  *           bonded balance. For example, the maximum emission rate is determined by what percentage
  *           of the total TRUST supply has been locked.
@@ -176,7 +176,9 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
     }
 
     /// @inheritdoc ITrustBonding
-    function emissionsForEpoch(uint256 epoch) public view returns (uint256) {
+    function emissionsForEpoch(uint256 epoch) public view returns (uint256) {/*@audit-info ধরো class prize = 100 টাকা
+যদি পুরো class active হয় → 100 টাকা দেয়া হবে
+যদি কিছুই না আসে (মোট 75 জন active) → prize pool auto কমে → 75 টাকা দেয়া হবে*/
         return _emissionsForEpoch(epoch);
     }
 
@@ -213,7 +215,7 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
     }
 
     /// @inheritdoc ITrustBonding
-    function userEligibleRewardsForEpoch(address account, uint256 epoch) public view returns (uint256) {
+    function userEligibleRewardsForEpoch(address account, uint256 epoch) public view returns (uint256) {//@audit-issue
         return _userEligibleRewardsForEpoch(account, epoch);
     }
 
@@ -339,7 +341,7 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
 
         return epochRewards - claimedRewards;
     }
-
+  //    Mach 5
     /*//////////////////////////////////////////////////////////////
                             USER ACTIONS
     //////////////////////////////////////////////////////////////*/
