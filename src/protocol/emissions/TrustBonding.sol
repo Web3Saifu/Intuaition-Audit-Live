@@ -70,10 +70,10 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
     mapping(address user => mapping(uint256 epoch => uint256 claimedRewards)) public userClaimedRewardsForEpoch;
 
     /// @notice The MultiVault contract address
-    address public multiVault;
+    address public multiVault;//@audit-info protocol usage data আসে এখান থেকে।
 
     /// @notice The SatelliteEmissionsController contract address
-    address public satelliteEmissionsController;
+    address public satelliteEmissionsController;//@audit-info প্রতি epoch এ কত reward হবে ,epoch কত লম্বা,reward user কে transfer করা
 
     /// @notice The system utilization lower bound in basis points (represents the minimum possible system utilization
     /// ratio)
@@ -114,13 +114,13 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
 
     /// @inheritdoc ITrustBonding
     function initialize(
-        address _owner,
-        address _timelock,
-        address _trustToken,
-        uint256 _epochLength,
-        address _satelliteEmissionsController,
-        uint256 _systemUtilizationLowerBound,
-        uint256 _personalUtilizationLowerBound
+        address _owner,//@audit-info contract এর main admin।
+        address _timelock,//@audit-info যে contract delayed admin action execute করবে।,Admin change → delay → execute।
+        address _trustToken,//@audit-info কোন token lock হবে।
+        uint256 _epochLength,//@audit-info epochLength = 7 days 
+        address _satelliteEmissionsController,//@audit-info reward emission control করা contract। কত reward mint হবে emission rule অনুযায়ী।
+        uint256 _systemUtilizationLowerBound,//@audit-info 4000 = 40%
+        uint256 _personalUtilizationLowerBound//@audit-info 2500 = 25%
     )
         external
         initializer
@@ -129,14 +129,15 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
             revert TrustBonding_ZeroAddress();
         }
 
-        __Pausable_init();
-        __VotingEscrow_init(_owner, _trustToken, _epochLength);
+        __Pausable_init();//@audit-info pause feature activate করে।
+        __VotingEscrow_init(_owner, _trustToken, _epochLength);//@audit-info owner → admin ,trustToken → কোন token lock হবে ,epochLength → epoch কত সময়ের হবে              example:token lock system,veTRUST calculation,epoch based accounting
+
 
         _grantRole(DEFAULT_ADMIN_ROLE, _owner);
         _grantRole(PAUSER_ROLE, _owner);
 
-        _setTimelock(_timelock);
-        _updateSatelliteEmissionsController(_satelliteEmissionsController);
+        _setTimelock(_timelock);//@audit-info Timelock contract এর address set করা।
+        _updateSatelliteEmissionsController(_satelliteEmissionsController);//@audit-info Emission = reward pool size, Prize pool = 10,000 TRUST
         _updateSystemUtilizationLowerBound(_systemUtilizationLowerBound);
         _updatePersonalUtilizationLowerBound(_personalUtilizationLowerBound);
     }
@@ -151,12 +152,13 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
     }
 
     /// @inheritdoc ITrustBonding
-    function epochsPerYear() public view returns (uint256) {
+    function epochsPerYear() public view returns (uint256) {//@audit-info একটা epoch কখন শেষ হবে সেই timestamp দেয়। ,Example epoch 5 end = 1700000000
+
         return _epochsPerYear();
     }
 
     /// @inheritdoc ITrustBonding
-    function epochTimestampEnd(uint256 epoch) public view returns (uint256) {
+    function epochTimestampEnd(uint256 epoch) public view returns (uint256) {//@audit-info কোন timestamp কোন epoch এর মধ্যে পড়ছে সেটা বের করে, Example: timestamp = 1700000000 → epoch 5, epoch 5 end = 1700000000
         return _epochTimestampEnd(epoch);
     }
 
@@ -166,7 +168,7 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
     }
 
     /// @inheritdoc ITrustBonding
-    function currentEpoch() public view returns (uint256) {
+    function currentEpoch() public view returns (uint256) {//@audit-info এখন protocol কোন epoch এ আছে।,Example → epoch 12
         return _currentEpoch();
     }
 
@@ -176,33 +178,31 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
     }
 
     /// @inheritdoc ITrustBonding
-    function emissionsForEpoch(uint256 epoch) public view returns (uint256) {/*@audit-info ধরো class prize = 100 টাকা
-যদি পুরো class active হয় → 100 টাকা দেয়া হবে
-যদি কিছুই না আসে (মোট 75 জন active) → prize pool auto কমে → 75 টাকা দেয়া হবে*/
+    function emissionsForEpoch(uint256 epoch) public view returns (uint256) {/*@audit-info ধরো class prize = 100 টাকা,যদি পুরো class active হয় → 100 টাকা দেয়া হবে,যদি কিছুই না আসে (মোট 75 জন active) → prize pool auto কমে → 75 টাকা দেয়া হবে*/
         return _emissionsForEpoch(epoch);
     }
 
     /// @inheritdoc ITrustBonding
-    function totalLocked() public view returns (uint256) {
+    function totalLocked() public view returns (uint256) {//@audit-info User A = 100,User B = 200,Total locked = 300
         return supply;
     }
 
     /// @inheritdoc ITrustBonding
-    function totalBondedBalance() external view returns (uint256) {
+    function totalBondedBalance() external view returns (uint256) {//@audit-info Alice → 100 veTRUST (4 বছরের lock),Bob → 25 veTRUST (1 বছরের lock),মোট = 125 veTRUST, 6 মাস পরে:  87.5+12.5=100
         return _totalSupply(block.timestamp);
     }
 
     /// @inheritdoc ITrustBonding
-    function totalBondedBalanceAtEpochEnd(uint256 epoch) public view returns (uint256) {
+    function totalBondedBalanceAtEpochEnd(uint256 epoch) public view returns (uint256) {//?@audit-info  A veTRUST = 40, B veTRUST = 60,Total = 100
         if (epoch > currentEpoch()) {
             revert TrustBonding_InvalidEpoch();
         }
 
-        return _totalSupply(_epochTimestampEnd(epoch));
+        return _totalSupply(_epochTimestampEnd(epoch));//@audit-info _epochTimestampEnd(epoch) → সেই epoch শেষ হওয়ার timestamp।, _totalSupply(timestamp) → ঐ timestamp এ সব user এর veTRUST যোগ করে।
     }
 
     /// @inheritdoc ITrustBonding
-    function userBondedBalanceAtEpochEnd(address account, uint256 epoch) public view returns (uint256) {
+    function userBondedBalanceAtEpochEnd(address account, uint256 epoch) public view returns (uint256) {//@audit-info একজন user এর epoch শেষের সময় veTRUST কত ছিল।
         if (account == address(0)) {
             revert TrustBonding_ZeroAddress();
         }
@@ -225,7 +225,7 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
     }
 
     /// @inheritdoc ITrustBonding
-    function getSystemUtilizationRatio(uint256 epoch) public view returns (uint256) {
+    function getSystemUtilizationRatio(uint256 epoch) public view returns (uint256) {//@audit-info System utilization মানে পুরো protocol এর liquidity কতটা ব্যবহার হচ্ছে।
         return _getSystemUtilizationRatio(epoch);
     }
 
@@ -483,14 +483,14 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
             revert TrustBonding_InvalidEpoch();
         }
 
-        uint256 userBalance = userBondedBalanceAtEpochEnd(account, epoch);
-        uint256 totalBalance = totalBondedBalanceAtEpochEnd(epoch);
+        uint256 userBalance = userBondedBalanceAtEpochEnd(account, epoch);//@audit-info Alice veTRUST = 40
+        uint256 totalBalance = totalBondedBalanceAtEpochEnd(epoch);//@audit-info epoch শেষ সময় পুরো protocol veTRUST Alice = 40 ,Bob   = 60,Total = 100
 
         if (userBalance == 0 || totalBalance == 0) {
             return 0;
         }
 
-        return userBalance * _emissionsForEpoch(epoch) / totalBalance;
+        return userBalance * _emissionsForEpoch(epoch) / totalBalance;//@audit-info 40 × 100 (Epoch reward) / 100 (Total veTRUST)   = 40
     }
 
     function _getPersonalUtilizationRatio(address _account, uint256 _epoch) internal view returns (uint256) {
