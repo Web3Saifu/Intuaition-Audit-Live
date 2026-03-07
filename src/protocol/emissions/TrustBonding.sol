@@ -230,7 +230,7 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
     }
 
     /// @inheritdoc ITrustBonding
-    function getPersonalUtilizationRatio(address account, uint256 epoch) public view returns (uint256) {
+    function getPersonalUtilizationRatio(address account, uint256 epoch) public view returns (uint256) {//@audit-info 80% utilization মানে user তার rewards এর 80% পাবে, 50% utilization মানে user তার rewards এর 50% পাবে, 20% utilization মানে user তার rewards এর 20% পাবে, যদি utilization 0% বা 20% এর নিচে হয় তাহলে user তার rewards এর 25% পাবে (যদি personalUtilizationLowerBound = 2500 হয়) এবং যদি utilization 80% বা তার উপরে হয় তাহলে user তার rewards এর 100% পাবে (যদি personalUtilizationLowerBound = 2500 হয়)
         return _getPersonalUtilizationRatio(account, epoch);
     }
 
@@ -240,25 +240,25 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
         uint256 personalUtilization;
 
         if (_currEpoch > 0) {
-            userRewards = _userEligibleRewardsForEpoch(account, _currEpoch);
-            personalUtilization = _getPersonalUtilizationRatio(account, _currEpoch);
+            userRewards = _userEligibleRewardsForEpoch(account, _currEpoch);//@audit-info 40 × 100 (Epoch reward) / 100 (Total veTRUST)   = 40
+            personalUtilization = _getPersonalUtilizationRatio(account, _currEpoch);//@audit-info 80% utilization
         }
 
-        LockedBalance memory userLocked = locked[account];
+        LockedBalance memory userLocked = locked[account];//@audit-info এখান থেকে user এর lock data নেয়। Ex: locked amount = 100 TRUST,lock end = 1700000000
         return UserInfo({
-            personalUtilization: personalUtilization,
-            eligibleRewards: (userRewards * personalUtilization) / BASIS_POINTS_DIVISOR,
-            maxRewards: userRewards,
-            lockedAmount: userLocked.amount >= 0 ? uint256(uint128(userLocked.amount)) : 0,
-            lockEnd: userLocked.end,
-            bondedBalance: _balanceOf(account, block.timestamp)
+            personalUtilization: personalUtilization,//@audit-info 8000 (80%)
+            eligibleRewards: (userRewards * personalUtilization) / BASIS_POINTS_DIVISOR, //@audit-info 40 × 80% = 32, 40 × 8000 / 10000 = 32
+            maxRewards: userRewards,//@audit-info 40 TRUST, এটা utilization apply করার আগের reward।
+            lockedAmount: userLocked.amount >= 0 ? uint256(uint128(userLocked.amount)) : 0, //@audit-info 100 TRUST, এখানে amount কে uint128 এ কাস্ট করা হয়েছে কারণ Curve এর original contract এ amount এর type ছিল int128, এবং আমরা এটা trust bonding contract এ uint256 এ কাস্ট করেছি, তাই এখানে uint128 এ কাস্ট করার পরে আবার uint256 এ কাস্ট করা হয়েছে। 
+            lockEnd: userLocked.end,//@audit-info 1700000000
+            bondedBalance: _balanceOf(account, block.timestamp)//@audit-info এই মুহূর্তে user এর veTRUST power, যদি 100 TRUST lock করে 1-year lock দেয়, এবং 6 মাস decay হয়েছে → 50 veTRUST
         });
     }
 
     /// @inheritdoc ITrustBonding
-    function getUserApy(address account) external view returns (uint256 currentApy, uint256 maxApy) {
-        uint256 currEpoch = _currentEpoch();
-        uint256 userRewards = _userEligibleRewardsForEpoch(account, currEpoch);
+    function getUserApy(address account) external view returns (uint256 currentApy, uint256 maxApy) {//@audit-info User এর yearly reward percentage (APY) বের করে।
+        uint256 currEpoch = _currentEpoch(); //@audit-info এখন protocol কোন epoch এ আছে সেটা বের করে, Ex→ epoch 2
+        uint256 userRewards = _userEligibleRewardsForEpoch(account, currEpoch);//@audit-info userRewards = 40 × 100 / 100 ,userRewards = 40
         uint256 personalUtilization = _getPersonalUtilizationRatio(account, currEpoch);
         int256 locked = locked[account].amount;
 
@@ -437,7 +437,7 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
                             INTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    function _currentEpoch() internal view returns (uint256) {
+    function _currentEpoch() internal view returns (uint256) {//@audit-info Current epoch number বের করে
         return _epochAtTimestamp(block.timestamp);
     }
 
@@ -450,7 +450,7 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
     }
 
     function _epochAtTimestamp(uint256 timestamp) internal view returns (uint256) {
-        return ICoreEmissionsController(satelliteEmissionsController).getEpochAtTimestamp(timestamp);
+        return ICoreEmissionsController(satelliteEmissionsController).getEpochAtTimestamp(timestamp);//@audit-info একটি timestamp দেওয়া হলে বলে দেয় কোন epoch এ পড়ে সেটা।,ধরো epoch length = 1 week, epoch 0 start = 1 Jan 2025, timestamp = 15 Jan 2025 → epoch 2
     }
 
     function _emissionsForEpoch(uint256 epoch) internal view returns (uint256) {
@@ -461,7 +461,7 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
         uint256 maxEpochEmissions = ICoreEmissionsController(satelliteEmissionsController).getEmissionsAtEpoch(epoch);
 
         if (epoch < 2) {
-            return maxEpochEmissions;
+            return maxEpochEmissions;  
         }
 
         uint256 systemUtilizationRatio = _getSystemUtilizationRatio(epoch);
@@ -474,7 +474,7 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
         return userClaimedRewardsForEpoch[account][epoch] > 0;
     }
 
-    function _userEligibleRewardsForEpoch(address account, uint256 epoch) internal view returns (uint256) {
+    function _userEligibleRewardsForEpoch(address account, uint256 epoch) internal view returns (uint256) {//@audit-info এই functionটা একটা epoch এ user সর্বোচ্চ কত reward পাওয়ার যোগ্য
         if (account == address(0)) {
             revert TrustBonding_ZeroAddress();
         }
@@ -504,26 +504,26 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
         }
 
         // In epochs 0 and 1, the utilization ratio is set to the maximum value (100%)
-        if (_epoch < 2) {
-            return BASIS_POINTS_DIVISOR;
+        if (_epoch < 2) {//@audit-info Design choice, Reason → system bootstrap।
+            return BASIS_POINTS_DIVISOR;//@audit-info 10000 = 100%
         }
-
-        int256 userUtilizationBefore = IMultiVault(multiVault).getUserUtilizationInEpoch(_account, _epoch - 1);
-        int256 userUtilizationAfter = IMultiVault(multiVault).getUserUtilizationInEpoch(_account, _epoch);
+       //@audit-info delta = userUtilizationAfter - userUtilizationBefore , = 100 - 60, = 40
+        int256 userUtilizationBefore = IMultiVault(multiVault).getUserUtilizationInEpoch(_account, _epoch - 1); //@audit-info epoch 5 before = 60 ,
+        int256 userUtilizationAfter = IMultiVault(multiVault).getUserUtilizationInEpoch(_account, _epoch);//@audit-info epoch 6 after  = 100
 
         // Since rawUtilizationDelta is signed, we only do a sign check, as the explicit underflow check is not needed
-        int256 rawUtilizationDelta = userUtilizationAfter - userUtilizationBefore;
+        int256 rawUtilizationDelta = userUtilizationAfter - userUtilizationBefore;//@audit-info 100 - 60 = 40
 
         // If the utilizationDelta is negative or zero, we return the minimum personal utilization ratio
-        if (rawUtilizationDelta <= 0) {
+        if (rawUtilizationDelta <= 0) {    //@audit-issue 1 যদি userUtilizationAfter < userUtilizationBefore হয়, তাহলে userUtilizationDelta negative হবে, এবং এই case এ personalUtilizationLowerBound return হবে, যা হয়তো 2500 (25%) এ set করা আছে, তাহলে user তার rewards এর 25% পাবে, এবং যদি userUtilizationAfter == userUtilizationBefore হয়, তাহলে userUtilizationDelta zero হবে, এবং এই case এ personalUtilizationLowerBound return হবে, যা হয়তো 2500 (25%) এ set করা আছে, তাহলে user তার rewards এর 25% পাবে, এই design choice করা হয়েছে যাতে user যদি তার utilization কমিয়ে দেয় বা একই রাখে (যেমন: claim না করে), তাহলে তাকে penalize করা যায় এবং তার rewards কমিয়ে দেওয়া যায়।
             return personalUtilizationLowerBound;
         }
 
         // Since we previously ensured that userUtilizationDelta > 0, we can now safely cast it to uint256
-        uint256 userUtilizationDelta = uint256(rawUtilizationDelta);
+        uint256 userUtilizationDelta = uint256(rawUtilizationDelta); //@audit-info convert uint256, userUtilizationDelta = 40
 
         // Fetch the target utilization for the previous epoch
-        uint256 userUtilizationTarget = userClaimedRewardsForEpoch[_account][_epoch - 1];
+        uint256 userUtilizationTarget = userClaimedRewardsForEpoch[_account][_epoch - 1];//@audit-info Target = previous epoch-এ user কত reward claim করেছিল।
 
         if (userUtilizationTarget == 0) {
             // If the user had nothing claimable last epoch, don't penalize them as it's their first ever claim
@@ -655,4 +655,13 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
         uint256 curr = _currentEpoch();
         return curr == 0 ? 0 : curr - 1;
     }
+
+
+
+/* Intuation
+exp:
+Alice = 40
+Bob   = 60
+Total = 100 */
+
 }
