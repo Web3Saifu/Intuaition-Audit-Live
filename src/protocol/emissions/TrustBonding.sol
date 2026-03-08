@@ -523,12 +523,13 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
         uint256 userUtilizationDelta = uint256(rawUtilizationDelta); //@audit-info convert uint256, userUtilizationDelta = 40
 
         // Fetch the target utilization for the previous epoch
+        //@audit-issue 
         uint256 userUtilizationTarget = userClaimedRewardsForEpoch[_account][_epoch - 1];//@audit-info Target = previous epoch-এ user কত reward claim করেছিল।
 
-        if (userUtilizationTarget == 0) {
+        if (userUtilizationTarget == 0) {//@audit-info userUtilizationTarget = 40
             // If the user had nothing claimable last epoch, don't penalize them as it's their first ever claim
-            if (_userEligibleRewardsForEpoch(_account, _epoch - 1) == 0) {
-                return BASIS_POINTS_DIVISOR; // 100%
+            if (_userEligibleRewardsForEpoch(_account, _epoch - 1) == 0) {//@audit-info আগের epoch-এ user কত reward পাওয়ার যোগ্য ছিল,এটা claim করেছে কিনা সেটা দেখে না।
+                return BASIS_POINTS_DIVISOR; // 100% //@audit-ok If you reduce your claim, you will no longer get the advantage.
             }
 
             // They did have eligibility last epoch but chose not to claim --> give them only the floor allocation
@@ -536,9 +537,10 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
         }
 
         // If the userUtilizationDelta is greater than the target, we also return the max ratio.
-        if (userUtilizationDelta >= userUtilizationTarget) {
+        //@audit-issue if 80 percent
+        if (userUtilizationDelta >= userUtilizationTarget) { //@audit-issue she jokon target choto dibe  tokon 100% utilization pabe ,পরের epoch-এ user একটি বড় activity করে delta বাড়ালে delta >= target দ্রুত পূরণ হয় → contract 100% ratio দেয়।
             return BASIS_POINTS_DIVISOR; // 100%
-        }
+        }  
 
         // Normalize the final utilizationRatio to be within the bounds of the personalUtilizationLowerBound and
         // BASIS_POINTS_DIVISOR
@@ -602,8 +604,16 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
         pure
         returns (uint256)
     {
-        uint256 ratioRange = BASIS_POINTS_DIVISOR - lowerBound;
-        uint256 utilizationRatio = lowerBound + (delta * ratioRange) / target;
+        uint256 ratioRange = BASIS_POINTS_DIVISOR - lowerBound; //@audit-info 100% - 25% = 75%
+        uint256 utilizationRatio = lowerBound + (delta * ratioRange) / target;/*@audit-info lowerBound = 25%
+               delta = 20
+              target = 40
+            ratioRange = 75% (100-25)
+
+             utilizationRatio = 25 + (20/40 * 75)
+                 = 25 + 37.5
+                 = 62.5%  */
+
         return utilizationRatio;
     }
 
