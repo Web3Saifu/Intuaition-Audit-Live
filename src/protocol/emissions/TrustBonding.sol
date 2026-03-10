@@ -336,10 +336,10 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
 
         // Reclaiming of unclaimed rewards is based on the amount of rewards allocated for a given epoch
         // (i.e. `maxEpochEmissions`), and not the system utilization-adjusted rewards.
-        uint256 epochRewards = ICoreEmissionsController(satelliteEmissionsController).getEmissionsAtEpoch(epoch);
-        uint256 claimedRewards = totalClaimedRewardsForEpoch[epoch];
+        uint256 epochRewards = ICoreEmissionsController(satelliteEmissionsController).getEmissionsAtEpoch(epoch);//@audit-info maxEpochEmissions = 1000
+        uint256 claimedRewards = totalClaimedRewardsForEpoch[epoch];//@audit-info  400
 
-        return epochRewards - claimedRewards;
+        return epochRewards - claimedRewards;//@audit-issue unclaimed = 1000 - 400,  unclaimed = 600
     }
   //    Mach 5
     /*//////////////////////////////////////////////////////////////
@@ -453,21 +453,20 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
         return ICoreEmissionsController(satelliteEmissionsController).getEpochAtTimestamp(timestamp);//@audit-info একটি timestamp দেওয়া হলে বলে দেয় কোন epoch এ পড়ে সেটা।,ধরো epoch length = 1 week, epoch 0 start = 1 Jan 2025, timestamp = 15 Jan 2025 → epoch 2
     }
 
-    function _emissionsForEpoch(uint256 epoch) internal view returns (uint256) {
+    function _emissionsForEpoch(uint256 epoch) internal view returns (uint256) {//@audit-info epoch = 10
         if (epoch > currentEpoch()) {
             revert TrustBonding_InvalidEpoch();
         }
 
-        uint256 maxEpochEmissions = ICoreEmissionsController(satelliteEmissionsController).getEmissionsAtEpoch(epoch);
+        uint256 maxEpochEmissions = ICoreEmissionsController(satelliteEmissionsController).getEmissionsAtEpoch(epoch);//@audit-info maxEpochEmissions = 1000 TRUST
 
         if (epoch < 2) {
             return maxEpochEmissions;  
         }
-
-        uint256 systemUtilizationRatio = _getSystemUtilizationRatio(epoch);
-        uint256 epochEmissions = maxEpochEmissions * systemUtilizationRatio / BASIS_POINTS_DIVISOR;
-
-        return epochEmissions;
+        //@audit-issue
+        uint256 systemUtilizationRatio = _getSystemUtilizationRatio(epoch);//@audit-info systemUtilizationRatio = 5000
+        uint256 epochEmissions = maxEpochEmissions * systemUtilizationRatio / BASIS_POINTS_DIVISOR;//@audit-info actualEmission = (1000 * 5000) / 10000,  1000 * 5000 = 5,000,000,    5,000,000 / 10000 = 500,  actualEmission = 500 TRUST
+        return epochEmissions;//@audit-info actualEmission = 500 TRUST
     }
 
     function _hasClaimedRewardsForEpoch(address account, uint256 epoch) internal view returns (bool) {
@@ -515,7 +514,7 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
         int256 rawUtilizationDelta = userUtilizationAfter - userUtilizationBefore;//@audit-info 100 - 60 = 40
 
         // If the utilizationDelta is negative or zero, we return the minimum personal utilization ratio
-        if (rawUtilizationDelta <= 0) {    //@audit-issue 1 যদি userUtilizationAfter < userUtilizationBefore হয়, তাহলে userUtilizationDelta negative হবে, এবং এই case এ personalUtilizationLowerBound return হবে, যা হয়তো 2500 (25%) এ set করা আছে, তাহলে user তার rewards এর 25% পাবে, এবং যদি userUtilizationAfter == userUtilizationBefore হয়, তাহলে userUtilizationDelta zero হবে, এবং এই case এ personalUtilizationLowerBound return হবে, যা হয়তো 2500 (25%) এ set করা আছে, তাহলে user তার rewards এর 25% পাবে, এই design choice করা হয়েছে যাতে user যদি তার utilization কমিয়ে দেয় বা একই রাখে (যেমন: claim না করে), তাহলে তাকে penalize করা যায় এবং তার rewards কমিয়ে দেওয়া যায়।
+        if (rawUtilizationDelta <= 0) {    //@audit-issue 1 যদি userUtilizationAfter < userUtilizationBefore হয়, তাহলে userUtilizationDelta negative হবে, 
             return personalUtilizationLowerBound;
         }
 
