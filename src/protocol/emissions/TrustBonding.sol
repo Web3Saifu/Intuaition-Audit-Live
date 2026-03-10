@@ -107,6 +107,7 @@ contract TrustBonding is ITrustBonding, PausableUpgradeable, VotingEscrow {
                                  CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
 
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
