@@ -68,6 +68,7 @@ contract WrappedTrust {
             allowance[from][msg.sender] -= amount;
         }
 
+
         balanceOf[from] -= amount;
         balanceOf[to] += amount;
 
