@@ -110,6 +110,8 @@ contract Trust is ITrust, TrustToken, AccessControlUpgradeable {
     /*                    INTERNAL FUNCTIONS               */
     /* =================================================== */
 
+
+
     function _setBaseEmissionsController(address newBaseEmissionsController) internal {
         if (newBaseEmissionsController == address(0)) {
             revert Trust_ZeroAddress();
